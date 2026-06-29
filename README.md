@@ -4,7 +4,7 @@ Dynamic control of AMD Ryzen CPU power limits based on real-time temperature mon
 
 This script uses `ryzenadj` to adjust power limits (STAPM, FAST, SLOW, APU_SLOW) on AMD Ryzen APUs (especially laptops) to prevent thermal throttling while maximizing performance.
 
-## 🔧 Requirements
+## Requirements
 
 - Linux system with AMD Ryzen CPU (APU or dGPU)
 - `ryzenadj` tool installed (https://github.com/flygoat/ryzenadj)
@@ -29,12 +29,12 @@ sudo make install
 ryzenadj --help
 ```
 
-> 💡 **Note**: On some distributions (e.g., Arch Linux), `ryzenadj` is available via package manager:
+> Note: On some distributions (e.g., Arch Linux), `ryzenadj` is available via package manager:
 > ```bash
 > sudo pacman -S ryzenadj
 > ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 dynamic-ryzen-power/
@@ -43,7 +43,7 @@ dynamic-ryzen-power/
 └── README.md
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 Create `config.json` in the same directory as the script:
 
@@ -86,7 +86,7 @@ Create `config.json` in the same directory as the script:
 | `polling_interval` | How often to check temperature (seconds) | 5 |
 | `min_reduction` | Minimum power reduction allowed | 0.3 (30%) |
 
-## ▶️ Usage
+## Usage
 
 ### Start the service
 
@@ -95,7 +95,7 @@ cd /home/nestor/scripts/dynamic-ryzen-power
 sudo python3 dynamic_ryzen_power.py
 ```
 
-> 🔐 **Important**: The script must be run as root to modify power limits.
+> Important: The script must be run as root to modify power limits.
 
 ### Run as systemd service (recommended)
 
@@ -139,7 +139,7 @@ sudo systemctl status dynamic-ryzen-power
 journalctl -u dynamic-ryzen-power -f
 ```
 
-## 📊 How It Works
+## How It Works
 
 The script monitors temperature from multiple sensors:
 
@@ -159,7 +159,7 @@ It uses the **highest** of these readings to determine the current thermal state
 
 This prevents thermal throttling while maximizing sustained performance.
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### `ryzenadj` not found
 
@@ -180,15 +180,11 @@ ls /sys/class/hwmon/hwmon*/temp1_input
 
 Update `SENSORS` dictionary in `dynamic_ryzen_power.py` if sensor paths differ on your system.
 
-### Permission denied
-
-Ensure you run the script with `sudo` or as root.
-
-## 📜 License
+## License
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-## 💡 Credits
+## Credits
 
 - [ryzenadj](https://github.com/flygoat/ryzenadj) — by flygoat
 - Inspired by community power management scripts for Linux
