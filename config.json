@@ -1,0 +1,16 @@
+{
+    "ryzenadj_path": "/usr/local/bin/ryzenadj",
+    "default_power_limits": {
+        "stapm": 120000,
+        "fast": 140000,
+        "slow": 120000,
+        "apu_slow": 120000
+    },
+    "temperature_thresholds": {
+        "high": 84.0,
+        "low": 78.0
+    },
+    "power_reduction_factor": 0.02,
+    "polling_interval": 5,
+    "min_reduction": 0.3
+}
