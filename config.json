@@ -8,9 +8,14 @@
     },
     "temperature_thresholds": {
         "high": 84.0,
-        "low": 78.0
+        "low": 74.0
     },
-    "power_reduction_factor": 0.02,
-    "polling_interval": 5,
+    "power_reduction_factor_high": 0.02,
+    "power_reduction_factor_mid": 0.005,
+    "power_reduction_factor_low": 0.01,
+    "restore_step_percent": 0.05,
+    "mid_threshold_percent": 0.85,
+    "power_reduction_factor": 0.01,
+    "polling_interval": 4,
     "min_reduction": 0.3
 }

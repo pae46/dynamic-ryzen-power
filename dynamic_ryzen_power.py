@@ -40,6 +40,17 @@ try:
     # Power reduction factor: reduce by 2% per 1°C over 84°C
     POWER_REDUCTION_FACTOR = config.get("power_reduction_factor", 0.02)
 
+    # Power reduction factors for different zones
+    POWER_REDUCTION_FACTOR_HIGH = config.get("power_reduction_factor_high", 0.02)
+    POWER_REDUCTION_FACTOR_MID = config.get("power_reduction_factor_mid", 0.005)
+    POWER_REDUCTION_FACTOR_LOW = config.get("power_reduction_factor_low", 0.01)
+
+    # Restore step: percentage of default limits to restore per cycle
+    RESTORE_STEP_PERCENT = config.get("restore_step_percent", 0.05)
+
+    # Mid threshold as percentage of default limits
+    MID_THRESHOLD_PERCENT = config.get("mid_threshold_percent", 0.85)
+
     # Polling interval (seconds)
     INTERVAL = config.get("polling_interval", 5)
 
@@ -55,8 +66,13 @@ except Exception as e:
     DEFAULT_SLOW = 120000
     DEFAULT_APU_SLOW = 120000
     THRESHOLD_HIGH = 84.0
-    THRESHOLD_LOW = 74.0
+    THRESHOLD_LOW = 78.0
     POWER_REDUCTION_FACTOR = 0.02
+    POWER_REDUCTION_FACTOR_HIGH = 0.02
+    POWER_REDUCTION_FACTOR_MID = 0.005
+    POWER_REDUCTION_FACTOR_LOW = 0.01
+    RESTORE_STEP_PERCENT = 0.05
+    MID_THRESHOLD_PERCENT = 0.85
     INTERVAL = 5
     MIN_REDUCTION = 0.3
 
@@ -102,10 +118,15 @@ def restore_defaults():
     set_power_limits(DEFAULT_STAPM, DEFAULT_FAST, DEFAULT_SLOW, DEFAULT_APU_SLOW)
 
 def main():
-    # Restore defaults on startup
+    # Initialize with default limits
+    current_limits = {
+        "stapm": DEFAULT_STAPM,
+        "fast": DEFAULT_FAST,
+        "slow": DEFAULT_SLOW,
+        "apu_slow": DEFAULT_APU_SLOW
+    }
     logging.info("Dynamic Ryzen Power service started.")
-    restore_defaults()
-    at_default_limits = True
+    set_power_limits(DEFAULT_STAPM, DEFAULT_FAST, DEFAULT_SLOW, DEFAULT_APU_SLOW)
 
     try:
         while True:
@@ -116,27 +137,79 @@ def main():
                 time.sleep(INTERVAL)
                 continue
 
-            if max_temp >= THRESHOLD_HIGH:
-                # Calculate reduction: 2% per °C over 84°C
+            new_stapm = current_limits["stapm"]
+            new_fast = current_limits["fast"]
+            new_slow = current_limits["slow"]
+            new_apu_slow = current_limits["apu_slow"]
+
+            if max_temp > THRESHOLD_HIGH:
+                # Zone 1: Maximum reduction (2% per °C over 84°C)
                 overage = max_temp - THRESHOLD_HIGH
-                reduction = 1.0 - (overage * POWER_REDUCTION_FACTOR)
-                reduction = max(MIN_REDUCTION, reduction)  # Never reduce below MIN_REDUCTION of default
+                reduction = 1.0 - (overage * POWER_REDUCTION_FACTOR_HIGH)
+                reduction = max(MIN_REDUCTION, reduction)
 
-                new_stapm = int(DEFAULT_STAPM * reduction)
-                new_fast = int(DEFAULT_FAST * reduction)
-                new_slow = int(DEFAULT_SLOW * reduction)
-                new_apu_slow = int(DEFAULT_APU_SLOW * reduction)
+                new_stapm = int(current_limits["stapm"] * reduction)
+                new_fast = int(current_limits["fast"] * reduction)
+                new_slow = int(current_limits["slow"] * reduction)
+                new_apu_slow = int(current_limits["apu_slow"] * reduction)
 
-                logging.info(f"Temp {max_temp:.2f}°C > {THRESHOLD_HIGH}°C. Reducing power limits to {reduction:.1%}.")
+                logging.info(f"Zone 1: Temp {max_temp:.2f}°C > {THRESHOLD_HIGH}°C. Reducing power limits to {reduction:.1%}.")
                 set_power_limits(new_stapm, new_fast, new_slow, new_apu_slow)
-                at_default_limits = False
+                current_limits["stapm"] = new_stapm
+                current_limits["fast"] = new_fast
+                current_limits["slow"] = new_slow
+                current_limits["apu_slow"] = new_apu_slow
 
-            elif max_temp <= THRESHOLD_LOW:
-                # Restore to 100% if all temps below 74°C
-                if not at_default_limits:
-                    logging.info(f"Temp {max_temp:.2f}°C <= {THRESHOLD_LOW}°C. Restoring 100% limits.")
-                    set_power_limits(DEFAULT_STAPM, DEFAULT_FAST, DEFAULT_SLOW, DEFAULT_APU_SLOW)
-                    at_default_limits = True
+            elif THRESHOLD_HIGH >= max_temp > THRESHOLD_LOW:
+                # Zone 2: Minimal reduction/neutral
+                if max_temp <= THRESHOLD_HIGH - (THRESHOLD_HIGH - THRESHOLD_LOW) * (1 - MID_THRESHOLD_PERCENT):
+                    # Near high threshold - minimal reduction
+                    overage = max_temp - THRESHOLD_LOW
+                    reduction = 1.0 - (overage * POWER_REDUCTION_FACTOR_MID)
+                    reduction = max(0.0, reduction)
+
+                    new_stapm = int(DEFAULT_STAPM * reduction)
+                    new_fast = int(DEFAULT_FAST * reduction)
+                    new_slow = int(DEFAULT_SLOW * reduction)
+                    new_apu_slow = int(DEFAULT_APU_SLOW * reduction)
+
+                    logging.info(f"Zone 2: Temp {max_temp:.2f}°C. Reducing power limits slightly to {reduction:.1%}.")
+                    set_power_limits(new_stapm, new_fast, new_slow, new_apu_slow)
+                    current_limits["stapm"] = new_stapm
+                    current_limits["fast"] = new_fast
+                    current_limits["slow"] = new_slow
+                    current_limits["apu_slow"] = new_apu_slow
+                else:
+                    # Near low threshold - start restoring
+                    logging.info(f"Zone 2: Temp {max_temp:.2f}°C. Starting to restore power limits.")
+                    restore_step = int(DEFAULT_STAPM * RESTORE_STEP_PERCENT)
+                    new_stapm = min(DEFAULT_STAPM, current_limits["stapm"] + restore_step)
+                    new_fast = min(DEFAULT_FAST, current_limits["fast"] + restore_step)
+                    new_slow = min(DEFAULT_SLOW, current_limits["slow"] + restore_step)
+                    new_apu_slow = min(DEFAULT_APU_SLOW, current_limits["apu_slow"] + restore_step)
+
+                    set_power_limits(new_stapm, new_fast, new_slow, new_apu_slow)
+                    current_limits["stapm"] = new_stapm
+                    current_limits["fast"] = new_fast
+                    current_limits["slow"] = new_slow
+                    current_limits["apu_slow"] = new_apu_slow
+
+            else:
+                # Zone 3: Gradual restoration to 100%
+                restore_step = int(DEFAULT_STAPM * RESTORE_STEP_PERCENT)
+                new_stapm = min(DEFAULT_STAPM, current_limits["stapm"] + restore_step)
+                new_fast = min(DEFAULT_FAST, current_limits["fast"] + restore_step)
+                new_slow = min(DEFAULT_SLOW, current_limits["slow"] + restore_step)
+                new_apu_slow = min(DEFAULT_APU_SLOW, current_limits["apu_slow"] + restore_step)
+
+                if current_limits["stapm"] < DEFAULT_STAPM or current_limits["fast"] < DEFAULT_FAST or \
+                   current_limits["slow"] < DEFAULT_SLOW or current_limits["apu_slow"] < DEFAULT_APU_SLOW:
+                    logging.info(f"Zone 3: Temp {max_temp:.2f}°C. Restoring power limits to {new_stapm}/{new_fast}/{new_slow}/{new_apu_slow}.")
+                    set_power_limits(new_stapm, new_fast, new_slow, new_apu_slow)
+                    current_limits["stapm"] = new_stapm
+                    current_limits["fast"] = new_fast
+                    current_limits["slow"] = new_slow
+                    current_limits["apu_slow"] = new_apu_slow
 
             time.sleep(INTERVAL)
 
